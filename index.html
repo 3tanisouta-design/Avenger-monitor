@@ -1,0 +1,189 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>負荷状態モニター</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 22px;
+  background: #fff;
+  color: #222;
+  font-family: Arial, sans-serif;
+}
+h1 { font-size: 25px; }
+.sub { color: #777; font-size: 13px; }
+.panel {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 17px;
+  margin: 15px 0;
+}
+.value { font-size: 27px; font-weight: bold; }
+.label { color: #777; font-size: 13px; }
+.bar {
+  height: 9px;
+  background: #eee;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.fill {
+  height: 100%;
+  width: 0%;
+  background: #3688ed;
+  transition: width .3s;
+}
+button {
+  padding: 13px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #222;
+  color: white;
+  font-size: 15px;
+  margin: 5px;
+}
+button:disabled { opacity: .4; }
+.status { font-size: 18px; font-weight: bold; }
+#log {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  min-height: 60px;
+  white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+
+<h1>負荷状態モニター</h1>
+<p class="sub">LOCAL SYSTEM MONITOR / VERSION 1.0</p>
+
+<div class="panel">
+  <div class="label">システム状態</div>
+  <p class="status" id="status">待機中</p>
+  <div class="label">稼働時間</div>
+  <div class="value" id="time">00:00</div>
+</div>
+
+<div class="panel">
+  <div class="label">ブラウザの応答状態</div>
+  <div class="value" id="response">-- ms</div>
+  <div class="bar"><div class="fill" id="responseBar"></div></div>
+  <p class="sub">画面更新の遅延から計測する参考値</p>
+</div>
+
+<div class="panel">
+  <div class="label">メモリ使用量</div>
+  <div class="value" id="memory">取得不可</div>
+  <div class="bar"><div class="fill" id="memoryBar"></div></div>
+  <p class="sub">ブラウザが対応している場合のみ表示</p>
+</div>
+
+<div class="panel">
+  <div class="label">CPU情報</div>
+  <div class="value" id="cpu">取得不可</div>
+  <p class="sub">一般的なブラウザからCPU使用率は直接取得できません。</p>
+</div>
+
+<div class="panel">
+  <div class="label">操作</div>
+  <button id="start">モニター開始</button>
+  <button id="stop" disabled>停止</button>
+</div>
+
+<div class="panel">
+  <div class="label">システムログ</div>
+  <div id="log">[SYSTEM] 起動準備完了</div>
+</div>
+
+<script>
+let running = false;
+let startTime = 0;
+let timer = null;
+let frame = 0;
+let previous = 0;
+
+const $ = id => document.getElementById(id);
+
+function log(message) {
+  $("log").textContent =
+    "[" + new Date().toLocaleTimeString() + "] " +
+    message + "\n" + $("log").textContent;
+}
+
+function update() {
+  if (!running) return;
+
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  $("time").textContent =
+    String(Math.floor(elapsed / 60)).padStart(2,"0") +
+    ":" + String(elapsed % 60).padStart(2,"0");
+
+  const memory = performance.memory;
+  if (memory) {
+    const used = memory.usedJSHeapSize / 1048576;
+    const limit = memory.jsHeapSizeLimit / 1048576;
+    $("memory").textContent = used.toFixed(1) + " MB";
+    $("memoryBar").style.width =
+      Math.min(100, used / limit * 100) + "%";
+  }
+
+  $("cpu").textContent =
+    navigator.hardwareConcurrency
+      ? navigator.hardwareConcurrency + " 論理コア"
+      : "取得不可";
+
+  timer = setTimeout(update, 1000);
+}
+
+function measureFrame(timestamp) {
+  if (!running) return;
+
+  if (previous) {
+    const delay = timestamp - previous;
+    const ms = Math.max(0, delay - 16.7);
+    $("response").textContent = ms.toFixed(1) + " ms";
+    $("responseBar").style.width =
+      Math.min(100, ms * 3) + "%";
+  }
+
+  previous = timestamp;
+  frame = requestAnimationFrame(measureFrame);
+}
+
+$("start").onclick = () => {
+  if (running) return;
+  running = true;
+  startTime = Date.now();
+  previous = 0;
+
+  $("status").textContent = "監視中";
+  $("start").disabled = true;
+  $("stop").disabled = false;
+
+  log("モニターを開始しました");
+  update();
+  frame = requestAnimationFrame(measureFrame);
+};
+
+$("stop").onclick = () => {
+  running = false;
+  clearTimeout(timer);
+  cancelAnimationFrame(frame);
+
+  $("status").textContent = "停止";
+  $("start").disabled = false;
+  $("stop").disabled = true;
+
+  log("モニターを停止しました");
+};
+</script>
+
+</body>
+</html>
+
